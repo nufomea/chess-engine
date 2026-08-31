@@ -1,9 +1,6 @@
-﻿#include "board.h"
+#include "board.h"
 #include <iostream>
 #include <chrono>
-#include <windows.h>
-#include <vector>
-#include <tlhelp32.h>
 
 using namespace std;
 
@@ -68,81 +65,10 @@ void divide(int depth)
 	cout << "Total: " << total << '\n';
 }
 
-// P-core의 CPU Set ID 목록을 수집하는 함수
-std::vector<ULONG> GetPCoreCpuSetIds() {
-	std::vector<ULONG> pCoreIds;
-	ULONG returnLength = 0;
-
-	// 1. 필요한 버퍼 크기 조회
-	GetSystemCpuSetInformation(nullptr, 0, &returnLength, GetCurrentProcess(), 0);
-	if (returnLength == 0) return pCoreIds;
-
-	std::vector<BYTE> buffer(returnLength);
-	SYSTEM_CPU_SET_INFORMATION* cpuSetInfo = reinterpret_cast<SYSTEM_CPU_SET_INFORMATION*>(buffer.data());
-
-	// 2. 전체 CPU Set 정보 가져오기
-	if (GetSystemCpuSetInformation(cpuSetInfo, returnLength, &returnLength, GetCurrentProcess(), 0)) {
-		DWORD offset = 0;
-		while (offset < returnLength) {
-			SYSTEM_CPU_SET_INFORMATION* current = reinterpret_cast<SYSTEM_CPU_SET_INFORMATION*>(reinterpret_cast<BYTE*>(cpuSetInfo) + offset);
-
-			if (current->Type == CpuSetInformation) {
-				// EfficiencyClass: 숫자가 높을수록 고성능 코어(P-core)입니다.
-				// 0은 보통 E-core, 1 이상이 P-core에 해당합니다.
-				if (current->CpuSet.EfficiencyClass > 0) {
-					pCoreIds.push_back(current->CpuSet.Id);
-				}
-			}
-			offset += current->Size;
-		}
-	}
-	return pCoreIds;
-}
-
-// 특정 스레드를 P-core에 고정하는 함수
-bool PinThreadToPCores(HANDLE hThread) {
-	std::vector<ULONG> pCoreIds = GetPCoreCpuSetIds();
-
-	if (pCoreIds.empty()) {
-		std::cerr << "P-core를 찾을 수 없거나 구형 시스템입니다.\n";
-		return false;
-	}
-
-	// 스레드에 P-core CpuSet ID 배열 지정
-	BOOL result = SetThreadSelectedCpuSets(
-		hThread,
-		pCoreIds.data(),
-		static_cast<ULONG>(pCoreIds.size())
-	);
-
-	return result != 0;
-}
-
-size_t GetCurrentThreadCount() {
-	DWORD currentPid = GetCurrentProcessId();
-	HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
-	if (hSnapshot == INVALID_HANDLE_VALUE) return 0;
-
-	THREADENTRY32 te;
-	te.dwSize = sizeof(THREADENTRY32);
-	size_t threadCount = 0;
-
-	if (Thread32First(hSnapshot, &te)) {
-		do {
-			if (te.th32OwnerProcessID == currentPid) {
-				threadCount++;
-			}
-		} while (Thread32Next(hSnapshot, &te));
-	}
-
-	CloseHandle(hSnapshot);
-	return threadCount;
-}
-
 int main() {
 
 	auto start = std::chrono::high_resolution_clock::now();
-	U64 nodes = perft(6);
+	U64 nodes = perft(7);
 	auto end = std::chrono::high_resolution_clock::now();
 
 	std::chrono::duration<double> elapsed_seconds = end - start;
